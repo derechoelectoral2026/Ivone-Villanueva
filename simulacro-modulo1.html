@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulacro Módulo I – Conocimientos electorales</title>
+
+<!-- ═══════════════════════════════════════════════════════════
+  CONFIGURACIÓN DEL SIMULACRO
+  • BANCO_URL  → URL del JSON único con TODOS los reactivos
+                 (raw de GitHub o ruta relativa).
+  • POR_SESION → reactivos por sesión (se toman al azar del banco,
+                 primero los que aún no has visto).
+  • MIN_POR_REACTIVO → minutos por reactivo para calcular el tiempo.
+  • UMBRAL     → % mínimo para considerar aprobado.
+═══════════════════════════════════════════════════════════════ -->
+<script>
+  const CONFIG = {
+    MODULO:     'Módulo I · Conocimientos en materia electoral',
+    SUBTITULO:  'INE · IEEM · 5 formatos de reactivo · 🔀 Aleatorio',
+    BANCO_URL:  'https://raw.githubusercontent.com/derechoelectoral2026/BancosIEEM/main/banco-modulo1.json',
+    POR_SESION: 40,
+    MIN_POR_REACTIVO: 1.5,
+    UMBRAL: 70,
+    STORAGE_KEY: 'simulacro_modulo1_v2'
+  };
+</script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --acc:#0d47a1; --acc2:#1565c0; --acc-pale:#e3f2fd; --acc-mid:#90caf9;
+    --green:#1b5e20; --green-l:#e8f5e9; --green-m:#2e7d32;
+    --red:#b71c1c; --red-l:#ffebee; --red-m:#d32f2f;
+    --f1:#6a1b9a; --f1l:#f3e5f5;   /* A directo   */
+    --f2:#e65100; --f2l:#fff3e0;   /* B complet.  */
+    --f3:#00695c; --f3l:#e0f2f1;   /* C relación  */
+    --f4:#ad1457; --f4l:#fce4ec;   /* D orden     */
+    --f5:#4e342e; --f5l:#efebe9;   /* E elección  */
+    --g50:#fafafa; --g100:#f5f5f5; --g200:#e6e6e6;
+    --g400:#bdbdbd; --g600:#616161; --g800:#333; --g900:#1a1a1a;
+    --bg:#f2f4f7; --card:#fff;
+    --r:16px; --rs:12px; --sh:0 2px 14px rgba(0,0,0,.07);
+  }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html { font-size:18px; }
+  @media (max-width:520px){ html { font-size:16.5px; } }
+  body { font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:var(--g900); min-height:100dvh; line-height:1.6; overflow-x:hidden; }
+
+  /* HEADER */
+  .hdr { background:linear-gradient(135deg,#0a2f6b 0%,#0d47a1 60%,#1565c0 100%); color:#fff; padding:12px 18px; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:200; box-shadow:0 3px 14px rgba(13,71,161,.35); }
+  .hdr-logo { font-size:1.6rem; }
+  .hdr-text { flex:1; min-width:0; }
+  .hdr h1 { font-family:'Fraunces',serif; font-size:1.05rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hdr p { font-size:.75rem; opacity:.85; }
+  .hdr-right { text-align:right; }
+  .t-lbl { font-size:.62rem; opacity:.8; text-transform:uppercase; letter-spacing:.06em; }
+  .timer { font-family:'Fraunces',serif; font-size:1.7rem; font-weight:800; font-variant-numeric:tabular-nums; line-height:1; }
+  .timer.warn { color:#ffee58; } .timer.danger { color:#ff8a80; animation:blink .7s ease infinite; }
+  @keyframes blink { 50%{opacity:.45} }
+  .prog-wrap { background:#cfd8e3; height:5px; }
+  .prog-bar { height:5px; background:#ffca28; transition:width .4s ease; }
+
+  .main { padding:18px 16px 110px; max-width:860px; margin:0 auto; }
+  .card { background:var(--card); border-radius:var(--r); box-shadow:var(--sh); padding:24px 20px; margin-top:14px; animation:up .35s ease; }
+  @keyframes up { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+  .center { text-align:center; }
+  .hidden { display:none !important; }
+
+  /* LOADING / ERROR */
+  .spinner { width:44px; height:44px; border:4px solid var(--g200); border-top-color:var(--acc); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 14px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .err { border-top:5px solid var(--red-m); }
+  .err h3 { color:var(--red); font-family:'Fraunces',serif; margin-bottom:8px; }
+  .err code { background:var(--g100); padding:2px 6px; border-radius:4px; font-size:.8rem; word-break:break-all; }
+  .warn-box { background:#fff8e1; border:1.5px solid #ffcc80; color:#6d4c00; border-radius:var(--rs); padding:10px 14px; font-size:.85rem; margin-top:12px; text-align:left; }
+
+  /* START */
+  .start h2 { font-family:'Fraunces',serif; font-size:1.7rem; color:var(--acc); line-height:1.2; }
+  .start .sub { color:var(--g600); margin:6px 0 18px; }
+  .sec-title { font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; font-weight:700; color:var(--g600); margin:20px 0 10px; text-align:left; }
+  .modes { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .mode { border:2.5px solid var(--g200); border-radius:var(--rs); padding:14px; cursor:pointer; text-align:left; background:#fff; transition:border-color .15s, background .15s; position:relative; }
+  .mode:hover { border-color:var(--acc-mid); }
+  .mode.sel { border-color:var(--acc); background:var(--acc-pale); }
+  .mode.off { opacity:.45; cursor:not-allowed; }
+  .mode h4 { font-size:1.05rem; color:var(--acc); }
+  .mode .meta { font-size:.82rem; color:var(--g600); margin-top:2px; }
+  .mode .last { font-size:.78rem; margin-top:6px; color:var(--g800); }
+  .mode.full { grid-column:1/-1; background:linear-gradient(135deg,#fff,#f1f6ff); }
+  .mode.full.sel { background:var(--acc-pale); }
+  .toggle { display:flex; gap:10px; flex-wrap:wrap; }
+  .tg { flex:1; min-width:200px; border:2.5px solid var(--g200); border-radius:var(--rs); padding:12px 14px; cursor:pointer; text-align:left; background:#fff; }
+  .tg.sel { border-color:var(--acc); background:var(--acc-pale); }
+  .tg b { display:block; font-size:.98rem; }
+  .tg span { font-size:.8rem; color:var(--g600); }
+  .fmt-legend { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:18px 0 6px; }
+  .pill { padding:5px 12px; border-radius:20px; font-size:.78rem; font-weight:700; border:2px solid; white-space:nowrap; }
+  .fA { color:var(--f1); border-color:var(--f1); background:var(--f1l); }
+  .fB { color:var(--f2); border-color:var(--f2); background:var(--f2l); }
+  .fC { color:var(--f3); border-color:var(--f3); background:var(--f3l); }
+  .fD { color:var(--f4); border-color:var(--f4); background:var(--f4l); }
+  .fE { color:var(--f5); border-color:var(--f5); background:var(--f5l); }
+  .chips { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin:16px 0 20px; }
+  .chip { background:var(--acc-pale); color:var(--acc); border-radius:20px; padding:6px 14px; font-size:.85rem; font-weight:600; }
+  .link-btn { background:none; border:none; color:var(--g600); text-decoration:underline; font-size:.8rem; cursor:pointer; margin-top:12px; font-family:inherit; }
+
+  /* QUESTION */
+  .grid-nav { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:12px; }
+  .gn { width:30px; height:30px; border-radius:7px; border:1.5px solid var(--g200); background:#fff; font-size:.72rem; font-weight:700; color:var(--g600); cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit; }
+  .gn.done { background:var(--acc-pale); border-color:var(--acc-mid); color:var(--acc); }
+  .gn.cur { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .gn.hit { background:var(--green-l); border-color:var(--green-m); color:var(--green); }
+  .gn.miss { background:var(--red-l); border-color:var(--red-m); color:var(--red); }
+  .gn.cur.hit,.gn.cur.miss { outline:3px solid var(--acc); outline-offset:1px; }
+  .q-meta { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:12px; }
+  .q-tags { display:flex; gap:6px; flex-wrap:wrap; }
+  .tag { padding:4px 11px; border-radius:20px; font-size:.72rem; font-weight:700; background:var(--g100); color:var(--g800); }
+  .q-num { font-size:.82rem; color:var(--g600); white-space:nowrap; font-weight:600; }
+  .q-text { font-size:1.15rem; font-weight:600; line-height:1.5; margin-bottom:16px; }
+  .blank { display:inline-block; min-width:110px; border-bottom:2.5px solid var(--f2); margin:0 3px; }
+  .elist { list-style:none; margin:0 0 16px; padding:12px 16px; background:var(--g50); border-left:4px solid var(--acc); border-radius:0 var(--rs) var(--rs) 0; }
+  .elist li { display:flex; gap:10px; padding:5px 0; font-size:1rem; }
+  .elist .n { font-weight:800; color:var(--acc); min-width:22px; }
+  .rel { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+  @media (max-width:560px){ .rel { grid-template-columns:1fr; } }
+  .rel .col { background:var(--g50); border-radius:var(--rs); padding:10px 14px; border:1.5px solid var(--g200); }
+  .rel h5 { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--g600); margin-bottom:6px; }
+  .rel li { display:flex; gap:8px; padding:4px 0; font-size:.98rem; list-style:none; }
+  .rel .n { font-weight:800; color:var(--f3); min-width:22px; }
+
+  .opts { display:flex; flex-direction:column; gap:10px; }
+  .opt { padding:14px 14px; border:2.5px solid var(--g200); border-radius:var(--rs); cursor:pointer; display:flex; align-items:flex-start; gap:12px; font-size:1.02rem; line-height:1.45; background:#fff; transition:border-color .12s, background .12s; }
+  .opt:hover:not(.locked) { border-color:var(--acc-mid); }
+  .opt.sel { border-color:var(--acc); background:var(--acc-pale); }
+  .opt.ok { border-color:var(--green-m); background:var(--green-l); }
+  .opt.bad { border-color:var(--red-m); background:var(--red-l); }
+  .opt.locked { cursor:default; }
+  .lt { min-width:30px; height:30px; border-radius:50%; background:var(--g200); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.85rem; flex-shrink:0; }
+  .opt.sel .lt { background:var(--acc); color:#fff; }
+  .opt.ok .lt { background:var(--green-m); color:#fff; }
+  .opt.bad .lt { background:var(--red-m); color:#fff; }
+  .ico { margin-left:auto; }
+  .expl { margin-top:14px; padding:12px 14px; background:#f1f8e9; border-left:4px solid var(--green-m); border-radius:0 var(--rs) var(--rs) 0; font-size:.95rem; color:var(--g800); }
+  .expl .src { display:block; margin-top:6px; font-size:.8rem; color:var(--g600); }
+  .confirm { text-align:center; margin-top:14px; }
+
+  /* BUTTONS */
+  .btn { padding:12px 20px; border-radius:var(--rs); border:none; font-family:inherit; font-weight:700; font-size:.95rem; cursor:pointer; min-height:46px; transition:transform .1s, background .15s; }
+  .btn:active { transform:scale(.97); }
+  .btn-p { background:var(--acc); color:#fff; }
+  .btn-p:hover { background:var(--acc2); }
+  .btn-p[disabled] { background:var(--g400); cursor:not-allowed; }
+  .btn-s { background:var(--g200); color:var(--g800); }
+  .btn-g { background:var(--green-m); color:#fff; }
+  .btn-lg { width:100%; padding:16px; font-size:1.05rem; }
+
+  /* BOTTOM NAV */
+  .nav { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--g200); box-shadow:0 -4px 14px rgba(0,0,0,.06); padding:10px 16px; padding-bottom:max(10px,env(safe-area-inset-bottom)); display:flex; justify-content:space-between; align-items:center; gap:10px; z-index:200; }
+  .nav-inf { font-size:.88rem; color:var(--g600); line-height:1.35; }
+  .nav-inf b { color:var(--g900); }
+  .nav-btns { display:flex; gap:8px; }
+
+  /* RESULTS */
+  .ring { width:130px; height:130px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; font-family:'Fraunces',serif; font-size:2.2rem; color:#fff; }
+  .res h2 { font-family:'Fraunces',serif; font-size:1.6rem; }
+  .bk { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:10px 0 6px; text-align:left; }
+  .bk-item { border:1.5px solid var(--g200); border-radius:var(--rs); padding:10px 12px; }
+  .bk-lbl { font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .bk-sc { font-size:1.05rem; font-weight:700; }
+  .bar { height:6px; background:var(--g200); border-radius:3px; margin-top:6px; }
+  .bar i { display:block; height:6px; border-radius:3px; }
+  .res .btn { margin-top:10px; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">🗳️</div>
+  <div class="hdr-text">
+    <h1 id="hdrTitle">Cargando simulacro…</h1>
+    <p id="hdrSub"></p>
+  </div>
+  <div class="hdr-right">
+    <div class="t-lbl">Tiempo</div>
+    <div class="timer" id="timer">--:--</div>
+  </div>
+</div>
+<div class="prog-wrap"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
+
+<div class="main">
+  <div id="loadingScreen" class="card center">
+    <div class="spinner"></div>
+    <p>Cargando paquetes de reactivos…</p>
+  </div>
+  <div id="errorScreen" class="card center err hidden"></div>
+  <div id="startScreen" class="card start center hidden"></div>
+  <div id="examScreen" class="hidden"></div>
+  <div id="resultsScreen" class="hidden"></div>
+</div>
+
+<div class="nav hidden" id="navBar"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTES
+// ═══════════════════════════════════════════════════════════
+const TEMAS = {
+  "1": "Sistema político-electoral",
+  "2": "Estructura y funcionamiento del INE y del IEEM",
+  "3": "Etapas del proceso electoral local",
+  "4": "Justicia Electoral"
+};
+const TEMA_COLOR = { "1":"#6a1b9a", "2":"#0d47a1", "3":"#00695c", "4":"#ad1457" };
+const FMT = {
+  A: { n:1, nombre:"Cuestionamiento directo",       cls:"fA", color:"#6a1b9a" },
+  B: { n:2, nombre:"Completamiento",                cls:"fB", color:"#e65100" },
+  C: { n:3, nombre:"Relación de elementos",         cls:"fC", color:"#00695c" },
+  D: { n:4, nombre:"Jerarquización u ordenamiento", cls:"fD", color:"#ad1457" },
+  E: { n:5, nombre:"Elección de elementos",         cls:"fE", color:"#4e342e" }
+};
+const LETRAS = "abcdefghij";
+
+// ═══════════════════════════════════════════════════════════
+//  ESTADO
+// ═══════════════════════════════════════════════════════════
+let BANCO = [];             // todos los reactivos del JSON
+let avisosCarga = [];       // advertencias (reactivos inválidos, duplicados…)
+let estudio = true;         // true: ver respuesta al confirmar; false: modo examen
+let Q = [], TOTAL = 0;
+let answers, revealed, current, secondsLeft, timerInterval, finished = false;
+
+// ── Historial en el navegador ──
+//  vistas  → ids ya presentados en la ronda actual
+//  ronda   → nº de vuelta completa al banco
+//  ultimos → últimos puntajes
+function leerHist() {
+  const vacio = { vistas:[], ronda:1, ultimos:[] };
+  try { return Object.assign(vacio, JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY)) || {}); }
+  catch(e) { return vacio; }
+}
+function guardarHist(h) {
+  try { localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(h)); } catch(e) {}
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CARGA DEL BANCO JSON
+// ═══════════════════════════════════════════════════════════
+async function cargarBanco() {
+  try {
+    const sep = CONFIG.BANCO_URL.includes('?') ? '&' : '?';
+    const res = await fetch(CONFIG.BANCO_URL + sep + 'v=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const preguntas = Array.isArray(data) ? data : data.preguntas;
+    if (!Array.isArray(preguntas) || !preguntas.length) throw new Error('el JSON no tiene el arreglo "preguntas"');
+    BANCO = preguntas.filter(validarPregunta);
+    if (!BANCO.length) throw new Error('ningún reactivo válido');
+  } catch (err) {
+    document.getElementById('loadingScreen').classList.add('hidden');
+    const e = document.getElementById('errorScreen');
+    e.innerHTML = `<h3>⚠️ No se pudo cargar el banco</h3>
+      <p>${err.message}. Revisa <code>CONFIG.BANCO_URL</code>. Si abres el HTML directo desde tu computadora (file://), el navegador bloquea la lectura del JSON: súbelo a GitHub o usa un servidor local.</p>
+      <p style="margin-top:8px"><code>${CONFIG.BANCO_URL}</code></p>`;
+    e.classList.remove('hidden');
+    return;
+  }
+  detectarDuplicados();
+  pintarInicio();
+}
+
+function validarPregunta(q) {
+  const ok = q && q.id && FMT[q.fmt] && q.q && Array.isArray(q.opts) && q.opts.length >= 2 &&
+             Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.opts.length;
+  if (!ok) { console.warn('Reactivo inválido descartado:', q); avisosCarga.push(`Reactivo inválido descartado: <code>${(q && q.id) || '(sin id)'}</code>`); }
+  return ok;
+}
+
+// Avisa si un mismo id o un mismo enunciado aparece dos veces en el banco
+function detectarDuplicados() {
+  const ids = {}, textos = {};
+  BANCO.forEach(q => {
+    const t = q.q.trim().toLowerCase();
+    if (ids[q.id]) avisosCarga.push(`ID repetido: <code>${q.id}</code>`);
+    if (textos[t]) avisosCarga.push(`Enunciado repetido entre <code>${textos[t]}</code> y <code>${q.id}</code>`);
+    ids[q.id] = true; textos[t] = q.id;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PANTALLA DE INICIO
+// ═══════════════════════════════════════════════════════════
+function porSesion() { return Math.min(CONFIG.POR_SESION, BANCO.length); }
+function minutos(n) { return Math.round(n * CONFIG.MIN_POR_REACTIVO); }
+
+function pintarInicio() {
+  const h = leerHist();
+  const ids = new Set(BANCO.map(q => q.id));
+  const vistas = h.vistas.filter(id => ids.has(id)).length;   // ignora ids que ya no existen
+  const restantes = BANCO.length - vistas;
+  const pctRonda = Math.round(vistas / BANCO.length * 100);
+  const n = porSesion();
+
+  document.getElementById('hdrTitle').textContent = CONFIG.MODULO;
+  document.getElementById('hdrSub').textContent = CONFIG.SUBTITULO;
+
+  const ult = h.ultimos.slice(-5).reverse()
+    .map(u => `<span class="chip" style="background:${u.pct >= CONFIG.UMBRAL ? '#e8f5e9;color:#1b5e20' : '#ffebee;color:#b71c1c'}">${u.pct}% · ${u.fecha}</span>`).join('');
+
+  const s = document.getElementById('startScreen');
+  s.innerHTML = `
+    <h2>${CONFIG.MODULO}</h2>
+    <p class="sub">${CONFIG.SUBTITULO}</p>
+
+    <div class="mode full sel" style="cursor:default">
+      <h4>🎯 Sesión de ${n} reactivos · ${minutos(n)} min</h4>
+      <div class="meta">Se eligen al azar de un banco de <b>${BANCO.length}</b> reactivos, dando prioridad a los que aún no has visto.</div>
+      <div class="last" style="margin-top:10px">Ronda ${h.ronda}: has visto <b>${vistas}</b> de ${BANCO.length} · faltan <b>${restantes}</b>${restantes < n ? ` (la sesión se completará con ${n - restantes} ya vistos y empezará la ronda ${h.ronda + 1})` : ''}</div>
+      <div class="bar"><i style="width:${pctRonda}%;background:var(--acc)"></i></div>
+    </div>
+
+    <div class="sec-title">Modo</div>
+    <div class="toggle">
+      <div class="tg ${estudio ? 'sel' : ''}" onclick="elegirEstudio(true)"><b>📖 Estudio</b><span>Confirmas cada reactivo y ves la respuesta y su fundamento.</span></div>
+      <div class="tg ${!estudio ? 'sel' : ''}" onclick="elegirEstudio(false)"><b>⏱️ Examen</b><span>Como el real: ves tus resultados hasta el final.</span></div>
+    </div>
+
+    <div class="fmt-legend">
+      ${Object.entries(FMT).map(([k,f]) => `<span class="pill ${f.cls}">${f.n} · ${f.nombre}</span>`).join('')}
+    </div>
+    ${ult ? `<div class="sec-title">Últimos puntajes</div><div class="chips" style="justify-content:flex-start;margin-top:0">${ult}</div>` : '<div style="height:14px"></div>'}
+    <button class="btn btn-p btn-lg" onclick="startExam()">Comenzar simulacro →</button>
+    ${vistas || h.ultimos.length ? `<button class="link-btn" onclick="reiniciarHist()">Reiniciar historial (reactivos vistos y puntajes)</button>` : ''}
+    ${avisosCarga.length ? `<div class="warn-box">⚠️ ${avisosCarga.join('<br>')}</div>` : ''}`;
+
+  document.getElementById('loadingScreen').classList.add('hidden');
+  document.getElementById('resultsScreen').classList.add('hidden');
+  document.getElementById('examScreen').classList.add('hidden');
+  document.getElementById('navBar').classList.add('hidden');
+  s.classList.remove('hidden');
+  clearInterval(timerInterval);
+  document.getElementById('timer').textContent = '--:--';
+  document.getElementById('timer').className = 'timer';
+  document.getElementById('progBar').style.width = '0%';
+}
+function elegirEstudio(v) { estudio = v; pintarInicio(); }
+function reiniciarHist() {
+  if (!confirm('¿Borrar el historial de reactivos vistos y los puntajes?')) return;
+  guardarHist({ vistas:[], ronda:1, ultimos:[] }); pintarInicio();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ARMADO DE LA SESIÓN
+//  Toma POR_SESION reactivos al azar, primero los no vistos.
+//  Cuando el banco se agota, completa con ya vistos y arranca
+//  una ronda nueva: así nunca se repite un reactivo hasta
+//  haber pasado por todo el banco.
+// ═══════════════════════════════════════════════════════════
+function armarSesion() {
+  const h = leerHist();
+  const n = porSesion();
+  const vistas = new Set(h.vistas);
+  const nuevos = shuffle(BANCO.filter(q => !vistas.has(q.id)));
+  let sel;
+
+  if (nuevos.length >= n) {
+    sel = tomarRevueltos(nuevos, n);
+    h.vistas = [...vistas, ...sel.map(q => q.id)];
+  } else {
+    const relleno = shuffle(BANCO.filter(q => vistas.has(q.id))).slice(0, n - nuevos.length);
+    sel = [...nuevos, ...relleno];
+    h.ronda += 1;
+    h.vistas = relleno.map(q => q.id);          // el relleno ya cuenta en la ronda nueva
+  }
+  // Si con esta sesión se vio todo el banco, la siguiente empieza ronda nueva
+  if (h.vistas.length >= BANCO.length) { h.vistas = []; h.ronda += 1; }
+  guardarHist(h);                               // se registra al iniciar: recargar la página no repite el bloque
+  return sel;
+}
+// Reparte los n lugares entre los 4 temas en proporción a lo disponible
+// (método de restos mayores), para que cada sesión traiga de todo.
+function tomarRevueltos(pool, n) {
+  const grupos = {};
+  pool.forEach(q => (grupos[q.tema] = grupos[q.tema] || []).push(q));
+  const temas = Object.keys(grupos);
+  const cuota = {}, resto = [];
+  let asignados = 0;
+  temas.forEach(t => {
+    const exacto = grupos[t].length / pool.length * n;
+    cuota[t] = Math.floor(exacto);
+    asignados += cuota[t];
+    resto.push([t, exacto - cuota[t]]);
+  });
+  resto.sort((a, b) => b[1] - a[1]).slice(0, n - asignados).forEach(([t]) => cuota[t]++);
+  return temas.flatMap(t => shuffle(grupos[t]).slice(0, cuota[t]));
+}
+function barajarOpciones(q) {
+  const idx = shuffle([...q.opts.keys()]);
+  return { ...q, opts: idx.map(i => q.opts[i]), correct: idx.indexOf(q.correct) };
+}
+
+// repetir = true → mismos reactivos de la sesión anterior con nuevo orden
+function startExam(repetir) {
+  const base = repetir && Q.length ? Q.map(q => BANCO.find(b => b.id === q.id)) : armarSesion();
+  Q = shuffle(base).map(barajarOpciones);
+  TOTAL = Q.length;
+  answers = new Array(TOTAL).fill(null);
+  revealed = new Array(TOTAL).fill(false);
+  current = 0; finished = false;
+  secondsLeft = minutos(TOTAL) * 60;
+
+  document.getElementById('hdrSub').textContent = `${TOTAL} reactivos · ${estudio ? 'Modo estudio' : 'Modo examen'}${repetir ? ' · repaso' : ''}`;
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('resultsScreen').classList.add('hidden');
+  document.getElementById('examScreen').classList.remove('hidden');
+  pintarNav();
+  renderQ(0);
+  startTimer();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDERIZADO DE REACTIVOS
+// ═══════════════════════════════════════════════════════════
+function enunciado(q) {
+  // En completamiento, resalta el espacio en blanco (4+ guiones bajos)
+  return q.fmt === 'B' ? q.q.replace(/_{4,}/g, '<span class="blank"></span>') : q.q;
+}
+
+function cuerpo(q) {
+  if (q.fmt === 'C') {
+    return `<div class="rel">
+      <div class="col"><h5>Columna 1</h5><ul>${(q.listaA||[]).map((t,i) => `<li><span class="n">${i+1}.</span><span>${t}</span></li>`).join('')}</ul></div>
+      <div class="col"><h5>Columna 2</h5><ul>${(q.listaB||[]).map((t,i) => `<li><span class="n">${LETRAS[i]})</span><span>${t}</span></li>`).join('')}</ul></div>
+    </div>`;
+  }
+  if ((q.fmt === 'D' || q.fmt === 'E') && Array.isArray(q.lista)) {
+    return `<ul class="elist">${q.lista.map((t,i) => `<li><span class="n">${i+1}.</span><span>${t}</span></li>`).join('')}</ul>`;
+  }
+  return '';
+}
+
+function renderQ(idx) {
+  current = idx;
+  const q = Q[idx];
+  const rev = revealed[idx];
+  const sel = answers[idx];
+
+  const nav = Q.map((_, i) => {
+    let c = 'gn';
+    if (revealed[i]) c += answers[i] === Q[i].correct ? ' hit' : ' miss';
+    else if (answers[i] !== null) c += ' done';
+    if (i === idx) c += ' cur';
+    return `<button class="${c}" onclick="irA(${i})">${i+1}</button>`;
+  }).join('');
+
+  const opts = q.opts.map((o, i) => {
+    let c = 'opt';
+    if (rev) { c += ' locked'; if (i === q.correct) c += ' ok'; else if (i === sel) c += ' bad'; }
+    else if (i === sel) c += ' sel';
+    const ico = rev ? (i === q.correct ? '<span class="ico">✅</span>' : i === sel ? '<span class="ico">❌</span>' : '') : '';
+    return `<div class="${c}" onclick="selectOpt(${i})"><span class="lt">${String.fromCharCode(65+i)}</span><span style="flex:1">${o}</span>${ico}</div>`;
+  }).join('');
+
+  document.getElementById('examScreen').innerHTML = `
+    <div class="grid-nav">${nav}</div>
+    <div class="card">
+      <div class="q-meta">
+        <div class="q-tags">
+          <span class="tag" style="background:${TEMA_COLOR[q.tema]}1a;color:${TEMA_COLOR[q.tema]}">Tema ${q.tema}${q.subtema ? ' · ' + q.subtema : ''}</span>
+          <span class="pill ${FMT[q.fmt].cls}" style="font-size:.7rem;padding:3px 10px">${FMT[q.fmt].n} · ${FMT[q.fmt].nombre}</span>
+        </div>
+        <span class="q-num">${idx+1} / ${TOTAL}</span>
+      </div>
+      <div class="q-text">${enunciado(q)}</div>
+      ${cuerpo(q)}
+      <div class="opts">${opts}</div>
+      ${rev ? `<div class="expl"><b>💡 Explicación:</b> ${q.expl || ''}${q.fuente ? `<span class="src">📘 Fundamento: ${q.fuente}</span>` : ''}</div>` : ''}
+      ${estudio && !rev && sel !== null ? `<div class="confirm"><button class="btn btn-g" onclick="revealAnswer()">Confirmar y ver respuesta</button></div>` : ''}
+    </div>`;
+
+  actualizarNav();
+  document.getElementById('progBar').style.width = (answers.filter(a => a !== null).length / TOTAL * 100) + '%';
+  window.scrollTo({ top:0, behavior:'instant' });
+}
+
+function selectOpt(i) {
+  if (revealed[current]) return;
+  answers[current] = i;
+  renderQ(current);
+}
+function revealAnswer() { revealed[current] = true; renderQ(current); }
+function irA(i) { renderQ(i); }
+function nextQ() {
+  if (current < TOTAL - 1) return renderQ(current + 1);
+  if (finished) return showResults();
+  const pend = answers.filter(a => a === null).length;
+  if (pend && !confirm(`Tienes ${pend} reactivo(s) sin responder. ¿Deseas finalizar?`)) return;
+  showResults();
+}
+function prevQ() { if (current > 0) renderQ(current - 1); }
+
+// ═══════════════════════════════════════════════════════════
+//  BARRA INFERIOR
+// ═══════════════════════════════════════════════════════════
+function pintarNav() {
+  const n = document.getElementById('navBar');
+  n.innerHTML = `
+    <div class="nav-inf" id="navInf"></div>
+    <div class="nav-btns">
+      <button class="btn btn-s" onclick="prevQ()">← Ant.</button>
+      <button class="btn btn-p" id="btnNext" onclick="nextQ()">Sig. →</button>
+      ${finished ? `<button class="btn btn-s" onclick="volverResultados()" title="Volver a resultados">✖</button>` : ''}
+    </div>`;
+  n.classList.remove('hidden');
+}
+function actualizarNav() {
+  const resp = answers.filter(a => a !== null).length;
+  const hits = Q.filter((q, i) => revealed[i] && answers[i] === q.correct).length;
+  let extra;
+  if (finished) extra = answers[current] === Q[current].correct ? '<span style="color:var(--green)">✅ Correcta</span>' : '<span style="color:var(--red)">❌ Incorrecta</span>';
+  else extra = estudio ? `Aciertos: <b>${hits}</b>` : `Respondidas: <b>${resp}</b>`;
+  document.getElementById('navInf').innerHTML = `${finished ? 'Revisión' : 'Reactivo'} <b>${current+1}</b> de <b>${TOTAL}</b><br>${extra}`;
+  document.getElementById('btnNext').textContent = current === TOTAL - 1 ? (finished ? 'Resultados' : '🏁 Finalizar') : 'Sig. →';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CRONÓMETRO
+// ═══════════════════════════════════════════════════════════
+function pintarTimer() {
+  const m = Math.floor(secondsLeft / 60), s = secondsLeft % 60;
+  const el = document.getElementById('timer');
+  el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+  el.className = 'timer' + (secondsLeft <= 300 ? ' danger' : secondsLeft <= 900 ? ' warn' : '');
+}
+function startTimer() {
+  clearInterval(timerInterval);
+  pintarTimer();
+  timerInterval = setInterval(() => {
+    secondsLeft--; pintarTimer();
+    if (secondsLeft <= 0) { alert('⏰ Se terminó el tiempo.'); showResults(); }
+  }, 1000);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RESULTADOS
+// ═══════════════════════════════════════════════════════════
+function showResults() {
+  clearInterval(timerInterval);
+  const primeraVez = !finished;
+  finished = true;
+  const ok = i => answers[i] === Q[i].correct;
+  const hits = Q.filter((_, i) => ok(i)).length;
+  const pct = Math.round(hits / TOTAL * 100);
+  const pass = pct >= CONFIG.UMBRAL;
+
+  if (primeraVez) {
+    const h = leerHist();
+    h.ultimos = [...h.ultimos, { pct, fecha: new Date().toLocaleDateString('es-MX') }].slice(-20);
+    guardarHist(h);
+  }
+
+  const bloque = (lbl, color, a, t) => {
+    const p = t ? Math.round(a / t * 100) : 0;
+    return `<div class="bk-item"><div class="bk-lbl" style="color:${color}">${lbl}</div>
+      <div class="bk-sc" style="color:${color}">${a}/${t} <small style="font-weight:400;color:#616161">(${p}%)</small></div>
+      <div class="bar"><i style="width:${p}%;background:${color}"></i></div></div>`;
+  };
+  const porTema = Object.keys(TEMAS).map(t => {
+    const idx = Q.map((q, i) => q.tema === t ? i : -1).filter(i => i >= 0);
+    return idx.length ? bloque(`${t} · ${TEMAS[t]}`, TEMA_COLOR[t], idx.filter(ok).length, idx.length) : '';
+  }).join('');
+  const porFmt = Object.entries(FMT).map(([k, f]) => {
+    const idx = Q.map((q, i) => q.fmt === k ? i : -1).filter(i => i >= 0);
+    return idx.length ? bloque(`${f.n} · ${f.nombre}`, f.color, idx.filter(ok).length, idx.length) : '';
+  }).join('');
+  const sinResp = answers.filter(a => a === null).length;
+
+  document.getElementById('examScreen').classList.add('hidden');
+  document.getElementById('navBar').classList.add('hidden');
+  const r = document.getElementById('resultsScreen');
+  r.innerHTML = `<div class="card res center">
+    <div class="ring" style="background:${pass ? 'linear-gradient(135deg,#1b5e20,#43a047)' : 'linear-gradient(135deg,#b71c1c,#e53935)'}">${pct}%</div>
+    <h2>${pass ? '¡Excelente trabajo! 🎉' : 'Sigue practicando 💪'}</h2>
+    <p style="color:#616161;margin:4px 0 14px"><b>${hits}</b> aciertos de <b>${TOTAL}</b> reactivos${sinResp ? ` · ${sinResp} sin responder` : ''}</p>
+    <div class="sec-title">Por tema</div><div class="bk">${porTema}</div>
+    <div class="sec-title">Por formato de reactivo</div><div class="bk">${porFmt}</div>
+    <p style="color:#616161;margin:14px 0 6px;font-size:.92rem">${pass ? `Alcanzaste el umbral (≥${CONFIG.UMBRAL}%).` : `No alcanzaste el ${CONFIG.UMBRAL}%. Repasa los temas y formatos con menor puntaje.`}</p>
+    <button class="btn btn-p btn-lg" onclick="reviewAnswers()">📖 Revisar respuestas</button>
+    <button class="btn btn-g btn-lg" onclick="startExam(false)">➡️ Siguiente sesión (${porSesion()} reactivos nuevos)</button>
+    <button class="btn btn-s btn-lg" onclick="startExam(true)">🔁 Repetir estos mismos reactivos</button>
+    <button class="btn btn-s btn-lg" onclick="pintarInicio()">🏠 Volver al inicio</button>
+  </div>`;
+  r.classList.remove('hidden');
+  document.getElementById('progBar').style.width = '100%';
+  window.scrollTo({ top:0, behavior:'instant' });
+}
+
+function reviewAnswers() {
+  revealed.fill(true);
+  document.getElementById('resultsScreen').classList.add('hidden');
+  document.getElementById('examScreen').classList.remove('hidden');
+  pintarNav();
+  renderQ(0);
+}
+function volverResultados() { showResults(); }
+
+cargarBanco();
+</script>
+</body>
+</html>
